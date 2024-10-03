@@ -20,8 +20,12 @@ class ApiBitunix(BaseApiClient):
             api_key (str): Your BitUnix API key.
             secret_key (str): our Bitunix secret key.
         """
-        self.api_key = api_key or os.getenv('BITUNIX_API_KEY')
-        self.secret_key = secret_key or os.getenv("BITUNIX_SECRET_KEY")
+
+        #todo - fix these lines -->
+        #self.api_key = api_key or os.getenv('BITUNIX_API_KEY')
+        #self.secret_key = secret_key or os.getenv("BITUNIX_SECRET_KEY")
+        self.api_key = "b478e55cb996264f8ade2cd9450d453b"
+        self.secret_key = "7d2d3b78c073b3669537cf8651102e1c"
 
         if not self.api_key or not self.secret_key:
             raise ValueError("API key and Secret Key must be valid")
@@ -31,7 +35,7 @@ class ApiBitunix(BaseApiClient):
         self.logger = logging.getLogger(__name__)
 
         #Ensure storage directory exists
-        self.storage_path = Path('Storage')
+        self.storage_path = Path('storage')
         self.storage_path.mkdir(exist_ok=True)
 
     def create_nonce(self, length=32):
@@ -85,7 +89,7 @@ class ApiBitunix(BaseApiClient):
                 self.logger.info(f'Fetched latest price for {symbol}')
                 return data['data']
             else:
-                self.logger.error(f'Error: {data['msg']}')
+                self.logger.error(f'Error: {data["msg"]}')
                 return None
         
         except Exception as e:
@@ -167,129 +171,29 @@ class ApiBitunix(BaseApiClient):
         #todo - same as above, do i want this to save in a smarter way based on timestamp?
 
         
+#-------------------------------- Testing Code Below -------------------------------------
 
+if __name__ == "__main__":
+    client = ApiBitunix()
 
+    symbol = 'BTCUSDT'
+    interval = '1'
 
+    #Testing: Fetch and print K-Line Data
+    kline_data = client.get_kline_data(symbol, interval)
+    if kline_data is not None:
+        print("K-Line Data: ")
+        print(kline_data)
 
+    #Testing: Fetch and print latest price
+    latest_price = client.get_latest_price(symbol)
+    if latest_price:
+        df_price = pd.DataFrame([{'symbol':symbol, 'latest_price':latest_price}])
+        print("\nLatest Price:")
+        print(df_price)
+    
+    #Testing: Fetch and save K-Line data to CSV
+    client.fetch_and_save_kline_data(symbol,interval)
 
-
-
-
-###########
-
-
-    def fetch_data(self):
-        #implementation for this api
-        pass
-
-    def process_data(self,data):
-        #specific processing for API One
-        pass
-
-
-#Define API Key and Secret Key (todo: Temporary API Key)
-API_KEY = "b478e55cb996264f8ade2cd9450d453b"
-SECRET_KEY = "7d2d3b78c073b3669537cf8651102e1c"
-
-#Create a None (Random String)
-def create_nonce(length=32):
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
-
-#Create a Timestamp (in Milliseconds)
-def create_timestamp():
-    return str(int(time.time()*1000))
-
-#Create the signature using HMAC SHA256
-def create_signature(api_key, secret_key, nonce, timestamp):
-    message = api_key + nonce + timestamp
-    return hmac.new(secret_key.encode(), message.enconde(), hashlib.sha256).hexdigest()
-
-#Fetch latest price data from the API
-def get_latest_price(symbol):
-    url = "https://openapi.bitunix.com/api/spot/v1/market/last_price"
-    headers = {
-        'api-key': API_KEY,
-        'nonce': create_nonce(),
-        'timestamp': create_timestamp(),
-        'Content-Type': 'application/json'
-    }
-
-    params = {
-        'symbol': symbol
-    }
-
-    try:
-        response = requests.get(url, headers=headers, params=params)
-        data = response.json()
-        #DEBUGGING CODE todo - remove later
-        print("**Printing JSON from def get_latest_price() **")
-        print(data)
-        print("**JSON DUMPS from def get latest_price() ***")
-        print(json.dumps(data, indent=2))
-
-        if data['code'] == str(0):
-            return data['data']
-        else:
-            print(f'Error: {data["msg"]}, Your data[code] should have been 0, but instead it was {data["code"]}')
-            return None
-    except Exception as e:
-        print(f"An Error occurred: {e}")
-        return None
-
-#Fetch K-Line (Candlestick) Data
-def get_kline_data(symbol, interval='1'):
-    url = "https://openapi.bitunix.com/api/spot/v1/market/kline"
-    headers = {
-        'api-key': API_KEY,
-        'nonce': create_nonce(),
-        'timestamp': create_timestamp(),
-        'Content-Type': 'application/json'
-    }
-
-    params = {
-        'symbol':symbol,
-        'interval':interval
-    }
-
-    try:
-        response = requests.get(url,headers=headers, params=params)
-        data = response.json()
-
-        if data['code'] == str(0):
-            return data['data']
-        else:
-            print(f"Error on get_kline_data with {symbol} for symbol and {interval} for interval, datacode = {data['code']}")
-            return None
-    except Exception as e:
-        print(f"An Exception Error Occurred on get_kline_data. Symbol {symbol}, Interval {interval}, Exception: {e}")
-        return None
-
-
-## TESTING 
-
-# Example: Fetch the latest price and save to a DataFrame
-symbol = 'BTCUSDT'  # Example trading pair
-interval = "1"
-kline_data = get_kline_data(symbol, interval)
-
-if kline_data:
-    df = pd.DataFrame(kline_data)
-    print(df)
-
-
-
-#Testing 2
-
-#API CALL
-latest_price = get_latest_price(symbol)
-
-# Create a DataFrame
-if latest_price:
-    df = pd.DataFrame([{'symbol': symbol, 'latest_price': latest_price}])
-    print(df)
-
-    # Save to CSV file
-    df.to_csv('latest_price.csv', index=False)
-
-
-
+    #Testing Fetch and save latest price to CSV
+    client.fetch_and_save_latest_price(symbol)

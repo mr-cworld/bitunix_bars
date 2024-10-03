@@ -1,0 +1,3 @@
+api_client_bitunix:
+  base_url: "https://api.one.com" #example
+  api_key: "your_api_key"
