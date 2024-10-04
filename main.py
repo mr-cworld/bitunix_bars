@@ -1,6 +1,6 @@
 import pandas as pd
-from api_clients.api_client_bitunix import ApiBitunix
-from data_processing.indicators import Indicator
+from api_clients import ApiBitunix
+from data_processing import Indicator
 from dotenv import load_dotenv
 
 #Load Environment Variables

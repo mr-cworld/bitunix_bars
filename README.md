@@ -3,6 +3,8 @@
 Next Steps
 1. main.py --> CSV_Data_Processor (rename and move into data_processing folder)
 2. plotter.py -> new file in (data_processing) that will plot data and save pngs into a folder system in (storage)
+3. api_chart appender -> Take new data and add to historical data frame for that symbol, will need same tech for indicators 
+4. Day Collector (main run) -> Give it asset, get all data for all timeframes for that asset, run all indicators on that data
 
 
 Dev Log 1

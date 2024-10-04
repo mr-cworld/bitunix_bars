@@ -20,6 +20,13 @@ class ApiBitunix(BaseApiClient):
             api_key (str): Your BitUnix API key.
             secret_key (str): our Bitunix secret key.
         """
+        #New Feature 1.1
+        #Adding Lists for the values of timeframe and symbol 
+        #Mirroring this in the storage_manager, and indicator object (all my objects) 
+        #Which means this should have inheritated from a starting object fml
+
+        self.list_time_intervals = ['1','3','5','15','30','60','120','240','360','720','D','M','W']
+        self.list_trading_symbols = ['BTCUSDT','ETHUSDT','SOLUSDT','SUIUSDT','ARBUSDT']
 
         #todo - fix these lines -->
         #self.api_key = api_key or os.getenv('BITUNIX_API_KEY')
