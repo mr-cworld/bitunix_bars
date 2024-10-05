@@ -1,0 +1,1 @@
+1) Storage manager - Daily Saver needs to ping from the server side every x minutes and then append to server side tables we get rolling

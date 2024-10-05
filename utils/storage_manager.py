@@ -133,3 +133,32 @@ class StorageManager:
         else:
             self.logger.error(f"File not found: {file_path}")
             return None
+
+    def get_processed_path(self, date=None, symbol=None, timeframe=None):
+        """
+        Constructs the directory path for processed data
+        
+        Args:
+            date (str): The date string in 'MM-DD-YYYY' format
+            symbol (str): the trading symbol
+            timeframe (str): The TimeFrame
+        
+        Returns:
+            Path: The full directory
+        """
+        path = self.base_path / 'processed'
+
+        if date is None:
+            date = datetime.now().strftime('%m-%d-%Y')
+
+        if date:
+            path=path/date
+
+        if symbol:
+            path = path / symbol
+        
+        if timeframe:
+            path = path / timeframe
+
+        path.mkdir(parents=True, exist_ok=True)
+        return path

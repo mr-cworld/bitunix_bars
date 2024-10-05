@@ -1,0 +1,12 @@
+#Ignore
+storage/
+
+#Environment
+venv/
+env/
+.venv/
+.env/
+
+#Ignore logs
+logs/
+*.log
