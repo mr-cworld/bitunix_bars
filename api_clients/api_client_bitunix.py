@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import time, json, hashlib, hmac, random, string, os, logging
 from pathlib import Path
+import datetime
 
 
 class ApiBitunix(BaseApiClient):
@@ -172,10 +173,10 @@ class ApiBitunix(BaseApiClient):
         """
         df = self.get_kline_data(symbol, interval)
         if df is not None:
-            filename = f"{symbol}_kline_{interval}.csv"
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"{symbol}_kline_{interval}_{timestamp}.csv"
             self.save_dataframe_to_csv(df, filename)
-
-        #todo - same as above, do i want this to save in a smarter way based on timestamp?
+        
 
         
 #-------------------------------- Testing Code Below -------------------------------------
