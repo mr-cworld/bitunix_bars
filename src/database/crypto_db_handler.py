@@ -8,7 +8,12 @@ import pandas as pd
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 import sys
+import pytz
 
+from logging_config import setup_logging
+
+setup_logging()
+#OLD LOGGING TODO: FIX LOGGING APP WIDE 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -20,13 +25,29 @@ class CryptoDBHandler:
 
     def _load_config(self) -> dict:
         """Load database configuration from yaml file"""
-        config_path = Path("config/database_config.yaml")
+        config_path = Path(__file__).parent.parent / "config/database_config.yaml"
         try:
             with open(config_path, 'r') as file:
                 return yaml.safe_load(file)
         except Exception as e:
             logger.error(f"Error loading config: {e}")
             raise
+        
+        trading_config_path = Path(__file__).parent.parent / "config/trading_config.yaml"
+        try:
+            with open(trading_config_path, 'r') as file:
+                return yaml.safe_load(file)
+        except Exception as e:
+            logger.error(f"Error loading trading config: {e}")
+            raise
+
+    def _validate_timeframe(self, timeframe: str) -> str:
+        """Validate timeframe"""
+        timeframe = timeframe.lower().replace("_","")
+        valid_timeframes = set(self.trading_config['trading']['timeframes'])
+        if timeframe not in valid_timeframes:
+            raise ValueError(f"Invalid timeframe: {timeframe}")
+        return timeframe
 
     def connect(self) -> None:
         """Establish database connection"""
@@ -54,7 +75,9 @@ class CryptoDBHandler:
 
     def _get_table_name(self, symbol: str, timeframe: str) -> str:
         """Generate standardized table name"""
-        return f"{symbol}_{timeframe}".lower()
+        timeframe = timeframe.lower().replace("_","")
+        symbol = symbol.lower()
+        return f"{symbol}_{timeframe}"
 
     def create_crypto_table(self, symbol: str, timeframe: str) -> None:
         """Create table for specific crypto and timeframe if it doesn't exist"""
@@ -93,74 +116,53 @@ class CryptoDBHandler:
             logger.error(f"Error creating table {table_name}: {e}")
             raise
 
-    def get_latest_timestamp(self, symbol: str, timeframe: str) -> Optional[datetime]:
-        """Get the most recent timestamp for a symbol/timeframe"""
+    def get_latest_timestamp(self, symbol: str, timeframe: str) -> pd.Timestamp:
+        """Get the latest timestamp from the database"""
         table_name = self._get_table_name(symbol, timeframe)
-        
-        query = sql.SQL("""
-            SELECT MAX(ts) FROM {}
-        """).format(sql.Identifier(table_name))
-        
         try:
+            query = sql.SQL("SELECT MAX(ts) FROM {}").format(sql.Identifier(table_name))
             self.cur.execute(query)
-            result = self.cur.fetchone()
-            return result[0] if result else None
-        except Exception as e:
-            logger.error(f"Error getting latest timestamp for {table_name}: {e}")
+            result = self.cur.fetchone()[0]
+            
+            if result:
+                # Convert to timezone-aware timestamp
+                return pd.Timestamp(result).tz_localize('UTC')
             return None
+        except Exception as e:
+            logger.error(f"Error getting latest timestamp: {e}")
+            raise
 
     def insert_kline_data(self, df: pd.DataFrame, symbol: str, timeframe: str) -> None:
-        """Insert kline data while avoiding duplicates"""
+        """Insert kline data into the database"""
         if df.empty:
             logger.info("No data to insert")
             return
 
         table_name = self._get_table_name(symbol, timeframe)
         
-        # Prepare data for insertion
-        data_to_insert = [
-            (symbol, row.ts, row.open, row.high, row.low, row.close)
-            for _, row in df.iterrows()
-        ]
-
-        insert_query = sql.SQL("""
-            INSERT INTO {} (
-                symbol, ts, open, high, low, close
-            )
-            VALUES %s
-            ON CONFLICT (symbol, ts) DO UPDATE
-            SET
-                open = EXCLUDED.open,
-                high = EXCLUDED.high,
-                low = EXCLUDED.low,
-                close = EXCLUDED.close
-        """).format(sql.Identifier(table_name))
-
+        # Ensure timestamps are UTC
+        if df['ts'].dt.tz is None:
+            df['ts'] = df['ts'].dt.tz_localize('UTC')
+        elif df['ts'].dt.tz != pytz.UTC:
+            df['ts'] = df['ts'].dt.tz_convert('UTC')
+        
         try:
-            execute_values(self.cur, insert_query, data_to_insert)
+            # Convert DataFrame to list of tuples for insertion
+            records = df.to_records(index=False)
+            values = [tuple(record) for record in records]
+            
+            # Create the INSERT query
+            columns = df.columns
+            insert_query = sql.SQL("INSERT INTO {} ({}) VALUES %s ON CONFLICT DO NOTHING").format(
+                sql.Identifier(table_name),
+                sql.SQL(', ').join(map(sql.Identifier, columns))
+            )
+            
+            # Execute the query using execute_values
+            psycopg2.extras.execute_values(self.cur, insert_query, values)
             self.conn.commit()
-            logger.info(f"Successfully inserted/updated {len(data_to_insert)} rows for {table_name}")
+            logger.info(f"Successfully inserted {len(df)} rows into {table_name}")
         except Exception as e:
             self.conn.rollback()
-            logger.error(f"Error inserting data into {table_name}: {e}")
+            logger.error(f"Error inserting data: {e}")
             raise
-
-    def get_data_in_range(self, symbol: str, timeframe: str, 
-                         start_time: datetime, end_time: datetime) -> pd.DataFrame:
-        """Retrieve data for a specific time range"""
-        table_name = self._get_table_name(symbol, timeframe)
-        
-        query = sql.SQL("""
-            SELECT * FROM {}
-            WHERE ts BETWEEN %s AND %s
-            ORDER BY ts ASC
-        """).format(sql.Identifier(table_name))
-        
-        try:
-            self.cur.execute(query, (start_time, end_time))
-            columns = [desc[0] for desc in self.cur.description]
-            data = self.cur.fetchall()
-            return pd.DataFrame(data, columns=columns)
-        except Exception as e:
-            logger.error(f"Error retrieving data from {table_name}: {e}")
-            return pd.DataFrame() 
