@@ -49,45 +49,58 @@ def main():
                     print(f'No data fetched for {symbol} at interval {interval}.')
                     continue
 
-                # Filter columns before any processing
+                # Create clean DataFrame with only required columns
                 required_columns = ['symbol', 'ts', 'open', 'high', 'low', 'close']
-                df = df[required_columns].copy()  # Only keep needed columns
+                df_clean = df[required_columns].copy()
 
                 # Convert 'ts' column to datetime and ensure numeric types
-                df['ts'] = pd.to_datetime(df['ts'])
-                df['close'] = pd.to_numeric(df['close'], errors='coerce')
-                df.dropna(subset=['ts', 'close'], inplace=True)
+                try:
+                    # First convert to datetime with timezone
+                    df_clean['ts'] = pd.to_datetime(df_clean['ts'])
+                    
+                    # Convert to UTC and remove timezone info for PostgreSQL compatibility
+                    df_clean['ts'] = df_clean['ts'].dt.tz_convert('UTC').dt.tz_localize(None)
+                    
+                    df_clean['close'] = pd.to_numeric(df_clean['close'], errors='coerce')
+                    df_clean.dropna(subset=['ts', 'close'], inplace=True)
+
+                    # Debug print to verify conversion
+                    print(f"DataFrame types after conversion: {df_clean.dtypes}")
+                    print(f"Sample timestamp after conversion: {df_clean['ts'].iloc[0]}")
+
+                except Exception as e:
+                    logging.error(f"Error converting data types for {symbol} {interval}: {e}")
+                    continue
 
                 # Remove the first row if it has bad data
-                if len(df) > 1:
-                    df = df.drop(df.index[0])
+                if len(df_clean) > 1:
+                    df_clean = df_clean.iloc[1:].copy()
                     logging.info(f"Removed the first row for {symbol} {interval}")
 
                 # Sort data by timestamp in ascending order
-                df = df.sort_values(by='ts', ascending=True).reset_index(drop=True)
+                df_clean = df_clean.sort_values(by='ts', ascending=True).reset_index(drop=True)
                 logging.info(f"Sorted data for {symbol} {interval} in ascending order")
                 # df has columns: ['symbol', 'open', 'high', 'low', 'close', 'ts']
                 # Get the storage path using StorageManager
                 path = storage_manager.get_kline_path(
                     date_type='Date',
                     symbol=symbol,
-                    timeframe=f'{interval}m'  # Append 'm' to indicate minutes
+                    timeframe=f'{interval}m'
                 )
 
-                # Define the filenames
+                # Save files
                 parquet_filename = f'{symbol}_{interval}m.parquet'
                 csv_filename = f'{symbol}_{interval}m.csv'
-
-                # Save the DataFrame as a Parquet file
+                
                 parquet_file_path = path / parquet_filename
-                df.to_parquet(parquet_file_path, index=False)
+                df_clean.to_parquet(parquet_file_path, index=False)
                 print(f'Data saved to {parquet_file_path}')
 
                 # Optional: Save as CSV
                 csv_switch = True  # Toggle CSV saving
                 if csv_switch:
                     csv_file_path = path / csv_filename
-                    df.to_csv(csv_file_path, index=False)
+                    df_clean.to_csv(csv_file_path, index=False)
                     print(f'Data saved to {csv_file_path} as CSV')
 
                 # Database Insertion
@@ -96,20 +109,30 @@ def main():
                     latest_ts = db_handler.get_latest_timestamp(symbol, interval)
                     
                     if latest_ts:
-                        if not latest_ts.tzinfo:
-                            latest_ts = pd.Timestamp(latest_ts).tz_localize('UTC')
-                        if df['ts'].dt.tz is None:
-                            df['ts'] = df['ts'].dt.tz_localize('UTC')
-                        new_data = df[df['ts'] > latest_ts]
+                        # Convert latest_ts to naive datetime64[ns] by removing timezone
+                        latest_ts = latest_ts.tz_localize(None)
+                        
+                        # Debug prints
+                        print(f"Latest timestamp from DB (naive): {latest_ts}")
+                        print(f"Sample df timestamp: {df_clean['ts'].iloc[0]}")
+                        
+                        # Create new DataFrame for filtered data
+                        new_data = df_clean[df_clean['ts'] > latest_ts].copy()
                     else:
-                        new_data = df
+                        new_data = df_clean.copy()
+
+                    print(f"New data types before insertion: {new_data.dtypes}")
+                    print(f"Sample new data timestamp: {new_data['ts'].iloc[0] if not new_data.empty else 'No data'}")
 
                     if not new_data.empty:
                         db_handler.insert_kline_data(new_data, symbol, interval)
                         
                 except Exception as e:
                     logging.error(f"Failed to insert data into database for {symbol} {interval}: {e}")
-                    # Add error details logging...
+                    if 'latest_ts' in locals():
+                        logging.error(f"Latest timestamp type: {type(latest_ts)}")
+                        logging.error(f"Latest timestamp value: {latest_ts}")
+                    
             except Exception as e:
                 logging.error(f"Failed to fetch data from Bitunix API for {symbol} {interval}: {e}")
 

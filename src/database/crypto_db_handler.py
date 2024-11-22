@@ -10,9 +10,9 @@ from typing import Optional, List, Dict, Any
 import sys
 import pytz
 
-from logging_config import setup_logging
+#from logging_config import setup_logging
 
-setup_logging()
+#setup_logging()
 #OLD LOGGING TODO: FIX LOGGING APP WIDE 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 class CryptoDBHandler:
     def __init__(self):
         self.config = self._load_config()
+        self.trading_config = self._load_trading_config()
         self.conn = None
         self.cur = None
 
@@ -32,7 +33,8 @@ class CryptoDBHandler:
         except Exception as e:
             logger.error(f"Error loading config: {e}")
             raise
-        
+    def _load_trading_config(self) -> dict:
+        """Load trading configuration from yaml file"""
         trading_config_path = Path(__file__).parent.parent / "config/trading_config.yaml"
         try:
             with open(trading_config_path, 'r') as file:
@@ -138,31 +140,48 @@ class CryptoDBHandler:
             logger.info("No data to insert")
             return
 
-        table_name = self._get_table_name(symbol, timeframe)
-        
-        # Ensure timestamps are UTC
-        if df['ts'].dt.tz is None:
-            df['ts'] = df['ts'].dt.tz_localize('UTC')
-        elif df['ts'].dt.tz != pytz.UTC:
-            df['ts'] = df['ts'].dt.tz_convert('UTC')
-        
         try:
-            # Convert DataFrame to list of tuples for insertion
-            records = df.to_records(index=False)
-            values = [tuple(record) for record in records]
+            #logger.info(f"Received DataFrame with types: {df.dtypes}")
+            logger.info(f"Sample timestamp at start: {df['ts'].iloc[0]}")
+
+            # Create a clean copy with required columns
+            df_clean = df[['symbol', 'ts', 'open', 'high', 'low', 'close']].copy()
+            #logger.info(f"DataFrame types after copy: {df_clean.dtypes}")
+
+            # Convert numpy.datetime64 to Python datetime using the new recommended approach
+            df_clean['ts'] = pd.to_datetime(df_clean['ts']).dt.to_pydatetime()
+            # Alternative method if you want to be extra safe:
+            # df_clean['ts'] = np.array(df_clean['ts'].dt.to_pydatetime())
+            
+            # Convert numeric columns
+            df_clean['close'] = pd.to_numeric(df_clean['close'], errors='coerce')
+            
+            logger.info(f"Final DataFrame types: {df_clean.dtypes}")
+            logger.info(f"Sample final timestamp: {df_clean['ts'].iloc[0]}")
+
+            # Create values list for insertion
+            values = [tuple(x) for x in df_clean.to_numpy()]
+            
+            # Create the table
+            table_name = self._get_table_name(symbol, timeframe)
             
             # Create the INSERT query
-            columns = df.columns
-            insert_query = sql.SQL("INSERT INTO {} ({}) VALUES %s ON CONFLICT DO NOTHING").format(
+            insert_query = sql.SQL(
+                "INSERT INTO {} ({}) VALUES %s ON CONFLICT DO NOTHING"
+            ).format(
                 sql.Identifier(table_name),
-                sql.SQL(', ').join(map(sql.Identifier, columns))
+                sql.SQL(', ').join(map(sql.Identifier, ['symbol', 'ts', 'open', 'high', 'low', 'close']))
             )
             
             # Execute the query using execute_values
-            psycopg2.extras.execute_values(self.cur, insert_query, values)
+            execute_values(self.cur, insert_query, values)
             self.conn.commit()
-            logger.info(f"Successfully inserted {len(df)} rows into {table_name}")
+            logger.info(f"Successfully inserted {len(df_clean)} rows into {table_name}")
+            
         except Exception as e:
             self.conn.rollback()
             logger.error(f"Error inserting data: {e}")
+            # Print full error details
+            import traceback
+            logger.error(f"Full error: {traceback.format_exc()}")
             raise
