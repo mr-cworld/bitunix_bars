@@ -1,3 +1,5 @@
+#TODO: Post Phase 2 Potential update - better optimization with processing bar data for 1m/3m/5m more frequently but could be fine in practice. Wait and see after phase 2.
+
 import os, sys
 from pathlib import Path
 import pandas as pd
