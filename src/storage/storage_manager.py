@@ -9,7 +9,7 @@ class StorageManager:
     A class to manage storage of data files, organizing them into a directory.
     """
 
-    def __init__(self, base_path='storage'):
+    def __init__(self):
         """
         Initializes the StorageManager with a base_path
 
@@ -17,7 +17,7 @@ class StorageManager:
             base_path (str): The base directory for storing files.
         """
 
-        self.base_path = Path(base_path)
+        self.base_path = Path.home() / 'CryptoAPI_storage'
         self.base_path.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger(__name__)
 

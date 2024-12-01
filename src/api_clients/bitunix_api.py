@@ -43,7 +43,7 @@ class ApiBitunix(BaseApiClient):
         self.logger = logging.getLogger(__name__)
 
         #Ensure storage directory exists
-        self.storage_path = Path('storage')
+        self.storage_path = Path.home() / 'CryptoAPI_storage'
         self.storage_path.mkdir(exist_ok=True)
 
     def create_nonce(self, length=32):

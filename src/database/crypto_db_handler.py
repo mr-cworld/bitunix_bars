@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 import sys
 import pytz
+import numpy as np
+import traceback
 
 #from logging_config import setup_logging
 
@@ -45,10 +47,18 @@ class CryptoDBHandler:
 
     def _validate_timeframe(self, timeframe: str) -> str:
         """Validate timeframe"""
+        # Convert timeframe to string if it's an integer
+        timeframe = str(timeframe)
+        
+        # Convert to lowercase and remove underscores
         timeframe = timeframe.lower().replace("_","")
-        valid_timeframes = set(self.trading_config['trading']['timeframes'])
+
+        # Get valid timeframes from trading config
+        valid_timeframes = set(str(tf) for tf in self.trading_config.get('bitunix_timeframes', []))
+        
         if timeframe not in valid_timeframes:
-            raise ValueError(f"Invalid timeframe: {timeframe}")
+            raise ValueError(f"Invalid timeframe: {timeframe}. Must be one of {sorted(valid_timeframes)}")
+            
         return timeframe
 
     def connect(self) -> None:
@@ -76,9 +86,9 @@ class CryptoDBHandler:
             logger.info("Database connection closed")
 
     def _get_table_name(self, symbol: str, timeframe: str) -> str:
-        """Generate standardized table name"""
-        timeframe = timeframe.lower().replace("_","")
-        symbol = symbol.lower()
+        """Generate table name from symbol and timeframe"""
+        # Convert timeframe to string if it's an integer
+        timeframe = str(timeframe).lower()
         return f"{symbol}_{timeframe}"
 
     def create_crypto_table(self, symbol: str, timeframe: str) -> None:
@@ -141,23 +151,23 @@ class CryptoDBHandler:
             return
 
         try:
-            #logger.info(f"Received DataFrame with types: {df.dtypes}")
-            logger.info(f"Sample timestamp at start: {df['ts'].iloc[0]}")
-
             # Create a clean copy with required columns
             df_clean = df[['symbol', 'ts', 'open', 'high', 'low', 'close']].copy()
-            #logger.info(f"DataFrame types after copy: {df_clean.dtypes}")
-
-            # Convert numpy.datetime64 to Python datetime using the new recommended approach
-            df_clean['ts'] = pd.to_datetime(df_clean['ts']).dt.to_pydatetime()
-            # Alternative method if you want to be extra safe:
-            # df_clean['ts'] = np.array(df_clean['ts'].dt.to_pydatetime())
             
-            # Convert numeric columns
-            df_clean['close'] = pd.to_numeric(df_clean['close'], errors='coerce')
+            # Convert timestamps using the new recommended approach
+            df_clean['ts'] = pd.to_datetime(df_clean['ts']).dt.tz_localize(None)
+            df_clean['ts'] = np.array(df_clean['ts'])
             
-            logger.info(f"Final DataFrame types: {df_clean.dtypes}")
-            logger.info(f"Sample final timestamp: {df_clean['ts'].iloc[0]}")
+            # Convert numeric columns all at once
+            numeric_columns = ['open', 'high', 'low', 'close']
+            df_clean[numeric_columns] = df_clean[numeric_columns].apply(pd.to_numeric, errors='coerce')
+            
+            # Drop any rows with NaN values
+            df_clean.dropna(inplace=True)
+            
+            if df_clean.empty:
+                logger.warning(f"No valid data to insert after cleaning for {symbol} {timeframe}")
+                return
 
             # Create values list for insertion
             values = [tuple(x) for x in df_clean.to_numpy()]
@@ -181,7 +191,6 @@ class CryptoDBHandler:
         except Exception as e:
             self.conn.rollback()
             logger.error(f"Error inserting data: {e}")
-            # Print full error details
-            import traceback
+          
             logger.error(f"Full error: {traceback.format_exc()}")
             raise
