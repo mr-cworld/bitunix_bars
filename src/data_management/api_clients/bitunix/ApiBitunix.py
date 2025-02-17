@@ -1,4 +1,4 @@
-from .base_api_client import BaseApiClient
+from ..base_api_client import BaseApiClient
 import requests
 import pandas as pd
 import time, json, hashlib, hmac, random, string, os, logging
