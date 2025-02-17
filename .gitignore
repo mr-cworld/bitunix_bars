@@ -1,0 +1,30 @@
+
+#Environment
+venv/
+env/
+.venv/
+.env/
+
+#Ignore logs
+logs/
+*.log
+
+#Config files
+src/config/
+
+#parquet files
+*.parquet
+
+#bitunix token data
+src/api_clients/bitunix_token_data.py
+bitunix_token_data.py
+
+#notebooks
+notebooks/
+
+#market_snapshots
+market_snapshots/
+market_analysis_output/
+
+#src/data_management/config/
+src/data_management/config/

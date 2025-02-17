@@ -1,0 +1,19 @@
+## Source Documentation
+
+Simple Data flow path:
+
+    1. Data_Management - 
+        initalize the API connection, save to the database, and pull from the database for processing to work with
+
+    2. Processing - 
+        Process and clean the data, save the indicator data to the database, ready for the ML models to use
+
+    3. ML -  
+        Use the indicator data to make predictions on where we are in a timeframe. 
+
+ 
+
+## Data Management
+
+General Flow:
+    1. Api_clients folder - all of our objects that connect to various APIs.
